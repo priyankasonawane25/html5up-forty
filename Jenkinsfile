@@ -2,44 +2,36 @@ pipeline {
     agent any
 
     environment {
-        EC2_HOST = 'ec2-13-203-159-118.ap-south-1.compute.amazonaws.com'  // Your EC2 public DNS
-        EC2_USER = 'ubuntu'                                               // Default user for Ubuntu EC2
-        REMOTE_DIR = '/var/www/html'                                      // Web server root on EC2
-        SSH_CREDENTIAL_ID = 'ec2-ssh-key'                                 // ID of SSH key in Jenkins Credentials
+        EC2_HOST = 'ec2-13-203-159-118.ap-south-1.compute.amazonaws.com'  // Replace with your EC2 Public DNS
+        REMOTE_DIR = '/var/www/html'                                      // Path to deploy on EC2
+        EC2_USER = 'ubuntu'                                               // Change to 'ec2-user' if using Amazon Linux
     }
 
     stages {
-        stage('Prepare') {
+        stage('Preparation') {
             steps {
-                echo 'Preparing to deploy static website to EC2...'
+                echo '📦 Preparing deployment to EC2...'
             }
         }
 
         stage('Deploy Files to EC2') {
             steps {
-                echo "Using SSH credentials ID: ${SSH_CREDENTIAL_ID}"
-                sshagent(credentials: ["${SSH_CREDENTIAL_ID}"]) {
+                echo '🚀 Deploying files to EC2...'
+                sshagent (credentials: ['ec2-key']) { // 'ec2-key' is the ID of SSH private key in Jenkins
                     sh '''
-                        echo "Copying website files to EC2..."
                         scp -o StrictHostKeyChecking=no -r * ${EC2_USER}@${EC2_HOST}:${REMOTE_DIR}
                     '''
                 }
             }
         }
 
-        stage('Restart Web Server on EC2') {
+        stage('Restart Web Server') {
             steps {
-                sshagent(credentials: ["${SSH_CREDENTIAL_ID}"]) {
+                echo '🔁 Restarting web server on EC2...'
+                sshagent (credentials: ['ec2-key']) {
                     sh '''
-                        echo "Restarting web server on EC2..."
                         ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                            if systemctl is-active --quiet apache2; then
-                                sudo systemctl restart apache2
-                            elif systemctl is-active --quiet nginx; then
-                                sudo systemctl restart nginx
-                            else
-                                echo "No web server found to restart."
-                            fi
+                            sudo systemctl restart apache2 || sudo systemctl restart nginx
                         '
                     '''
                 }
@@ -52,7 +44,7 @@ pipeline {
             echo '✅ Deployment to EC2 successful!'
         }
         failure {
-            echo '❌ Deployment to EC2 failed. Check logs for details.'
+            echo '❌ Deployment to EC2 failed.'
         }
     }
 }
